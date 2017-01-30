@@ -6,12 +6,12 @@ does currently not support [Letsencrypt](https://letsencrypt.org/).
 
 This repo contains some scripts and recipes for web-sites hosted by
 servetheworld.net (hereby referred to as STW), to assist in
-Letsencrypt based automatic certificate-management.
+Letsencrypt-based automatic certificate-management.
 
 ## prerequisites
 
 - python 3
-- mechanicalsoup python 3 module (install using pip3)
+- mechanicalsoup python3 module (install using pip3)
 
 ## disclaimer
 
