@@ -128,6 +128,11 @@ def get_ssl_info(domain):
     assert_ok(getListResponse)
 
     getListJson = json.loads(getListResponse.text)
+    aaData = getListJson["aaData"]
+    if len(aaData) == 0:
+        print("- No certificates found!")
+        return None
+
     siteInfo = getListJson["aaData"][0][5]
     siteInfoJson = json.loads(siteInfo)
 
@@ -138,6 +143,10 @@ def get_ssl_info(domain):
 
 def get_certificate_info(domain):
     logicalId = get_ssl_info(domain)
+    if logicalId is None:
+        return None
+
+    print("Looking up certificate...")
     getCertificateUrl = sslPageUrl + "/GetCertificate?adSearchQuery=" + logicalId
 
     getCertificateResponse = browser.get(getCertificateUrl)
@@ -149,7 +158,9 @@ def get_certificate_info(domain):
 
 def certificate_needs_update(domain):
     currentCertInfo = get_certificate_info(domain)
-    print("Looking up existing certificate...")
+    if currentCertInfo is None:
+        return [True, None]
+
     currentValid = currentCertInfo["To"]
     currentValidDate = parse_date(currentValid)
 
