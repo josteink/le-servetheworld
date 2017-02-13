@@ -11,7 +11,7 @@ def main(argv):
     parser.add_argument("certfile")
     parser.add_argument("keyfile")
     args = parser.parse_args(argv)
-    stw_core.update_certificate(args.domain, args.certfile, args.keyfile)
+    stw_core.upload_certificate(args.domain, args.certfile, args.keyfile)
 
 
 if __name__ == '__main__':

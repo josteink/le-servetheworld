@@ -33,11 +33,6 @@ def assert_equalish(filename, value):
         raise Exception("Certificate component {0} was not updated on server!".format(filename))
 
 
-def assert_ok(response):
-    if response.status_code != 200:
-        raise Exception("Invalid response for " + response.url)
-
-
 # global objects
 browser = mechanicalsoup.Browser()
 loginUrl = "https://hcp.stwcp.net/"
@@ -66,7 +61,7 @@ def login():
 
     print("Loading login page ({0})...".format(loginUrl))
     loginPage = browser.get(loginUrl)
-    assert_ok(loginPage)
+    loginPage.raise_for_status()
 
     [username, password] = get_auth_config()
 
@@ -76,12 +71,14 @@ def login():
 
     print("Logging in (username: {0})...".format(username))
     redirectPage = browser.submit(loginForm, loginPage.url)
-    assert_ok(redirectPage)
+    redirectPage.raise_for_status()
 
     redirectForm = redirectPage.soup.select("form")[0]
 
-    mainPageUrl = redirectForm["action"]
+    # avoid double root-slash in URLs made later
+    mainPageUrl = redirectForm["action"][:-1]
     mainPage = browser.submit(redirectForm, mainPageUrl)
+    mainPage.raise_for_status()
     is_logged_in = True
 
 
@@ -96,7 +93,7 @@ def get_ssl_module():
 
     print("Loading SSL-module ({0})...".format(sslPageUrl))
     sslPage = browser.get(sslPageUrl)
-    assert_ok(sslPage)
+    sslPage.raise_for_status()
     is_ssl_module_loaded = True
 
 
@@ -109,7 +106,7 @@ def get_site_info(domain):
         timestamp = str(int(datetime.datetime.now().timestamp()))
         searchUrl = sslPageUrl + "/SearchAutocomplete?q=" + domain + "&limit=10&timestamp=" + timestamp
         sslIdResponse = browser.get(searchUrl)
-        assert_ok(sslIdResponse)
+        sslIdResponse.raise_for_status()
 
         [site, guid] = sslIdResponse.text.split("|")
         print("- Found site-id: {0}".format(guid))
@@ -125,7 +122,7 @@ def get_ssl_info(domain):
 
     print("Looking up SSL-info...")
     getListResponse = browser.get(getListUrl)
-    assert_ok(getListResponse)
+    getListResponse.raise_for_status()
 
     getListJson = json.loads(getListResponse.text)
     aaData = getListJson["aaData"]
@@ -150,7 +147,7 @@ def get_certificate_info(domain):
     getCertificateUrl = sslPageUrl + "/GetCertificate?adSearchQuery=" + logicalId
 
     getCertificateResponse = browser.get(getCertificateUrl)
-    assert_ok(getCertificateResponse)
+    getCertificateResponse.raise_for_status()
 
     certJson = json.loads(getCertificateResponse.text)
     return certJson
@@ -168,6 +165,43 @@ def certificate_needs_update(domain):
     return [currentValidDate <= expirationThreshold, currentValid]
 
 
+def add_new_certificate(domain, certfile, keyfile):
+    [needs_update, expiration] = certificate_needs_update(domain)
+    if not needs_update:
+        print("Current certificate not near expiration: {0}".format(expiration))
+        print("Not updating.")
+        return
+
+    print("Adding new certificate...")
+    addForm = sslPage.soup.select("form#iHaveCertAddForm")[0]
+
+    addForm.select("#HaveCertificate_CommonName")[0]["value"] = domain
+    addForm.select("#HaveCertificate_CertificateFile")[0]["value"] = certfile
+    addForm.select("#HaveCertificate_KeyFile")[0]["value"] = keyfile
+    addUrl = mainPageUrl + addForm["action"]
+
+    addResult = browser.submit(addForm, addUrl)
+    addResult.raise_for_status()
+
+    addResultContents = addResult.soup.select("textarea")[0]
+    addResultJson = json.loads(addResultContents.getText())
+    if addResultJson["success"] == "FALSE":
+        raise Exception("Error uploading certificate: " + addResultJson["info"][0]["message"])
+
+    print("Verifying...")
+    logicalId = get_ssl_info(domain)
+    if logicalId is None:
+        raise Exception("No certificate registered after upload!")
+
+    addedCertInfo = get_certificate_info(logicalId)
+    addedCert = addedCertInfo["Certificate"]
+    addedKey = addedCertInfo["Key"]
+
+    assert_equalish(certfile, addedCert)
+    assert_equalish(keyfile, addedKey)
+    print("Certificate updated!")
+
+
 def update_certificate(domain, certfile, keyfile):
     [needs_update, expiration] = certificate_needs_update(domain)
     if not needs_update:
@@ -175,10 +209,10 @@ def update_certificate(domain, certfile, keyfile):
         print("Not updating.")
         return
 
-    print("Updating certificate...")
+    updateForm = sslPage.soup.select("form#updateForm")[0]
 
     logicalId = get_ssl_info(domain)
-    updateForm = sslPage.soup.select("form#updateForm")[0]
+    print("Updating certificate...")
     logicalIdTag = sslPage.soup.new_tag("input")
     logicalIdTag["type"] = "hidden"
     logicalIdTag["name"] = "LogicalID"
@@ -191,7 +225,7 @@ def update_certificate(domain, certfile, keyfile):
     updateUrl = mainPageUrl + updateForm["action"]
 
     updateResult = browser.submit(updateForm, updateUrl)
-    assert_ok(updateResult)
+    updateResult.raise_for_status()
 
     print("Verifying...")
     updatedCertInfo = get_certificate_info(logicalId)
@@ -201,4 +235,17 @@ def update_certificate(domain, certfile, keyfile):
     assert_equalish(certfile, updatedCert)
     assert_equalish(keyfile, updatedKey)
     print("Certificate updated!")
+
+
+def upload_certificate(domain, certfile, keyfile):
+    [needs_update, expiration] = certificate_needs_update(domain)
+    if not needs_update:
+        print("Current certificate not near expiration: {0}".format(expiration))
+        print("Not updating.")
+        return
+
+    if expiration is None:
+        add_new_certificate(domain, certfile, keyfile)
+    else:
+        update_certificate(domain, certfile, keyfile)
 
