@@ -115,13 +115,55 @@ def get_site_info(domain):
     return site_infos[domain]
 
 
+def get_request_verification_token():
+    get_ssl_module()
+    input = sslPage.soup.select("input[name=='__RequestVerificationToken']")[0]
+    token = input["value"]
+    return token
+
+
 def get_ssl_info(domain):
     [site, guid] = get_site_info(domain)
 
-    getListUrl = sslPageUrl + "/Search?sEcho=2&iColumns=7&sColumns=&iDisplayLength=10&iDisplayStart=0&sSearch=&bEscapeRegex=true&sSearch_0=&bEscapeRegex_0=true&sSearch_1=&bEscapeRegex_1=true&sSearch_2=&bEscapeRegex_2=true&sSearch_3=&bEscapeRegex_3=true&sSearch_4=&bEscapeRegex_4=true&sSearch_5=&bEscapeRegex_5=true&sSearch_6=&bEscapeRegex_6=true&iSortingCols=1&iSortCol_0=0&iSortDir_0=asc&adSearchQuery=" + guid + "&dName=" + site
+    getListUrl = sslPageUrl + "/Search"
+    payload = {}
+
+    payload["sEcho"] = "5"
+    payload["iColumns"] = "8"
+    payload["sColumns"] = ",,,,,,,"
+    payload["iDisplayLength"] = "10"
+    payload["iDisplayStart"] = "0"
+
+    # nonsortable
+    for n in [0, 7]:
+        ns = str(n)
+        payload["mDataProp_" + ns] = ns
+        payload["sSearch_" + ns] = ""
+        payload["bRegex_" + ns] = "false"
+        payload["bSearchable_" + ns] = "true"
+        payload["bSortable_" + ns] = "false"
+
+    # sortable
+    for n in range(1, 6):
+        ns = str(n)
+        payload["mDataProp_" + ns] = ns
+        payload["sSearch_" + ns] = ""
+        payload["bRegex_" + ns] = "false"
+        payload["bSearchable_" + ns] = "true"
+        payload["bSortable_" + ns] = "true"
+
+    payload["sSearch"] = domain
+    payload["bRegex"] = "false"
+    payload["iSortingCols"] = "1"
+    payload["iSortCol_0"] = "6"
+    payload["iSortDir_0"] = "asc"
+    payload["adSearchQuery"] = guid
+    payload["dName"] = site
+    token = get_request_verification_token()
+    payload["__RequestVerificationToken"] = token
 
     print("Looking up SSL-info...")
-    getListResponse = browser.get(getListUrl)
+    getListResponse = browser.post(getListUrl, data=payload)
     getListResponse.raise_for_status()
 
     getListJson = json.loads(getListResponse.text)
