@@ -220,6 +220,14 @@ def add_new_certificate(domain, certfile, keyfile):
     addForm.select("#HaveCertificate_CommonName")[0]["value"] = domain
     addForm.select("#HaveCertificate_CertificateFile")[0]["value"] = certfile
     addForm.select("#HaveCertificate_KeyFile")[0]["value"] = keyfile
+    tokenTag = sslPage.soup.new_tag("input")
+    tokenTag["type"] = "hidden"
+    tokenTag["name"] = "__RequestVerificationToken"
+    tokenTag["id"] = "__RequestVerificationToken"
+    token = get_request_verification_token()
+    tokenTag["value"] = token
+    addForm.append(tokenTag)
+
     addUrl = mainPageUrl + addForm["action"]
 
     addResult = browser.submit(addForm, addUrl)
